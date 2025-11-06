@@ -123,13 +123,15 @@ def create_macos_release():
     subprocess.run([
         venv_pyinstaller, 
         '--onefile',
-        '--console',
+        '--windowed',
         '--name=FileShareServer',
         '--add-data=templates:templates',
+        '--add-data=auth_server.py:.',
+        '--add-data=remote_control.py:.',
         '--hidden-import=requests',
         '--hidden-import=urllib3',
         '--distpath=releases/macos',
-        'auth_server.py'
+        'simple_gui.py'
     ])
     
     # Create proper .app structure
@@ -142,28 +144,14 @@ def create_macos_release():
     os.makedirs(f"{app_path}/Contents/MacOS")
     os.makedirs(f"{app_path}/Contents/Resources")
     
-    # Create launcher script
+    # Create launcher script that runs the web GUI
     launcher_script = '''#!/bin/bash
 cd "$(dirname "$0")"
-
-echo "========================================="
-echo "   🔐 File Share Server Starting..."
-echo "========================================="
-echo ""
-echo "📱 Instructions:"
-echo "1. Note the admin password shown below"
-echo "2. Connect phone to same WiFi"
-echo "3. Open browser on phone"
-echo "4. Go to the IP address shown"
-echo ""
+echo "🎛️  Starting File Share Control Panel..."
+echo "📱 Control panel will open in your browser"
 echo "⚠️  Keep this window open while using"
 echo ""
-
 ./FileShareServer
-
-echo ""
-echo "Server stopped. Press any key to exit..."
-read -n 1
 '''
     
     with open(f"{app_path}/Contents/MacOS/File Share Server", 'w') as f:

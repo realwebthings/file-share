@@ -16,6 +16,9 @@ users.db
 *.sqlite
 *.sqlite3
 
+# Admin Credentials
+admin_password.txt
+
 # Python Cache
 __pycache__/
 *.py[cod]

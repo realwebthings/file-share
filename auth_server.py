@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import sys
 import socket
 import secrets
 import hashlib
@@ -13,6 +14,15 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
     VALID_TOKENS = {}  # token -> {user, expires}
     FAILED_ATTEMPTS = {}
     DB_FILE = 'users.db'
+    
+    def get_template_path(self, template_name):
+        """Get template path for both development and packaged app"""
+        if hasattr(sys, '_MEIPASS'):
+            # Running as packaged app
+            return os.path.join(sys._MEIPASS, 'templates', template_name)  # type: ignore
+        else:
+            # Running as script
+            return os.path.join('templates', template_name)
     
     @classmethod
     def init_db(cls):
@@ -38,8 +48,19 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
             admin_hash = hashlib.pbkdf2_hmac('sha256', admin_password.encode(), admin_salt.encode(), 100000)
             cursor.execute('INSERT INTO users (username, password_hash, salt, is_approved) VALUES (?, ?, ?, 1)',
                          ('admin', admin_hash.hex(), admin_salt))
+            
+            # Save password to desktop for easy access
+            desktop_path = os.path.expanduser('~/Desktop/FileShare_Admin_Password.txt')
+            with open(desktop_path, 'w') as f:
+                f.write(f"File Share Server - Admin Credentials\n")
+                f.write(f"=====================================\n\n")
+                f.write(f"Username: admin\n")
+                f.write(f"Password: {admin_password}\n\n")
+                f.write(f"Created: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"\nKeep this file safe and delete when no longer needed.\n")
+            
             print(f"\n*** ADMIN PASSWORD: {admin_password} ***")
-            print("*** SAVE THIS PASSWORD - IT WON'T BE SHOWN AGAIN ***\n")
+            print("*** PASSWORD SAVED TO: ~/Desktop/FileShare_Admin_Password.txt ***\n")
         conn.commit()
         conn.close()
     
@@ -134,7 +155,8 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
             return
         
         try:
-            with open('templates/login.html', 'r', encoding='utf-8') as f:
+            template_path = self.get_template_path('login.html')
+            with open(template_path, 'r', encoding='utf-8') as f:
                 html = f.read()
             
             if error_msg:
@@ -150,7 +172,9 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
     
     def send_welcome_page(self):
         try:
-            with open('templates/welcome.html', 'r', encoding='utf-8') as f:
+            # Handle both development and packaged app paths
+            template_path = self.get_template_path('welcome.html')
+            with open(template_path, 'r', encoding='utf-8') as f:
                 html = f.read()
             
             self.send_response(200)
@@ -162,7 +186,8 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
     
     def send_register_page(self, error_msg=''):
         try:
-            with open('templates/register.html', 'r', encoding='utf-8') as f:
+            template_path = self.get_template_path('register.html')
+            with open(template_path, 'r', encoding='utf-8') as f:
                 html = f.read()
             
             if error_msg:
@@ -354,7 +379,8 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
                 break
         
         try:
-            with open('templates/directory.html', 'r', encoding='utf-8') as f:
+            template_path = self.get_template_path('directory.html')
+            with open(template_path, 'r', encoding='utf-8') as f:
                 template = f.read()
             
             # Build parent link
@@ -419,7 +445,8 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
     
     def send_admin_page(self):
         try:
-            with open('templates/admin.html', 'r', encoding='utf-8') as f:
+            template_path = self.get_template_path('admin.html')
+            with open(template_path, 'r', encoding='utf-8') as f:
                 template = f.read()
             
             conn = sqlite3.connect(self.DB_FILE)
@@ -518,7 +545,11 @@ def get_local_ip():
     except:
         return "127.0.0.1"
 
-if __name__ == "__main__":
+def create_server(port=8000, host='0.0.0.0'):
+    """Create and return HTTP server instance without starting it"""
+    return HTTPServer((host, port), AuthFileHandler)
+
+def main():
     # Initialize database
     AuthFileHandler.init_db()
     
@@ -527,26 +558,37 @@ if __name__ == "__main__":
     remote_control.start_background_check()
     
     PORT = 8000
-    server = HTTPServer(('0.0.0.0', PORT), AuthFileHandler)
+    server = create_server(PORT)
     local_ip = get_local_ip()
     
-    print(f"🔐 Full Authentication File Server running on:")
-    print(f"Local: http://localhost:{PORT}")
-    print(f"Network: http://{local_ip}:{PORT}")
-    print(f"📱 Mobile URL: http://{local_ip}:{PORT}")
-    print("\n🔒 Security Features:")
-    print("✅ SQLite user database")
-    print("✅ PBKDF2 password hashing")
-    print("✅ Salt-based security")
-    print("✅ Token expiration (1 hour)")
-    print("✅ Rate limiting (5 attempts/5min)")
-    print("✅ User registration")
-    print("\n📝 First time? Visit /register to create account")
-    print("\nPress Ctrl+C to stop")
+    print("\n" + "="*60)
+    print("🔐 FILE SHARE SERVER - RUNNING")
+    print("="*60)
+    print(f"📱 MOBILE ACCESS: http://{local_ip}:{PORT}")
+    print(f"💻 COMPUTER ACCESS: http://localhost:{PORT}")
+    print("\n🔑 ADMIN LOGIN:")
+    print("   Username: admin")
+    print("   Password: Check Desktop file 'FileShare_Admin_Password.txt'")
+    print("\n📱 ON YOUR PHONE:")
+    print("   1. Connect to same WiFi")
+    print(f"   2. Open browser, go to: {local_ip}:{PORT}")
+    print("   3. Register account or login as admin")
+    print("   4. Browse and download files!")
+    print("\n⚠️  SECURITY: Only use on trusted networks")
+    print("\n🛑 TO STOP SERVER:")
+    print("   • Press Ctrl+C")
+    print("   • Or close this window")
+    print("="*60)
     
     try:
+        print("\n⚠️  To stop server: Press Ctrl+C or close this window")
+        print("🔒 Server will stop automatically when this window closes\n")
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nServer stopped")
+        print("\n🛑 Shutting down server...")
         remote_control.stop()
         server.shutdown()
+        print("✅ Server stopped successfully")
+
+if __name__ == "__main__":
+    main()
