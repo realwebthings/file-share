@@ -10,9 +10,36 @@
         .dir { background: #f0f0f0; }
         a { text-decoration: none; color: #333; }
         .header { background: #007bff; color: white; padding: 10px; margin-bottom: 20px; }
+        .copy-notification { position: fixed; top: 20px; right: 20px; background: #28a745; color: white; padding: 10px 15px; border-radius: 5px; display: none; z-index: 1000; }
     </style>
+    <script>
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(function() {
+                showNotification('Path copied to clipboard!');
+            }).catch(function(err) {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                showNotification('Path copied to clipboard!');
+            });
+        }
+        
+        function showNotification(message) {
+            const notification = document.getElementById('copy-notification');
+            notification.textContent = message;
+            notification.style.display = 'block';
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 2000);
+        }
+    </script>
 </head>
 <body>
+    <div id="copy-notification" class="copy-notification"></div>
     <div class="header">🔒 Secure File Server</div>
     <div style="margin-bottom: 20px;">{path}</div>
     {parent_link}

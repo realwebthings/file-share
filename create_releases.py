@@ -119,19 +119,23 @@ def create_macos_release():
     # Use virtual environment's PyInstaller
     venv_pyinstaller = "build_env/bin/pyinstaller"
     
-    # Build app bundle
+    # Build app bundle - include auth_server as additional module
     subprocess.run([
         venv_pyinstaller, 
         '--onefile',
         '--windowed',
         '--name=fileShare',
         '--add-data=templates:templates',
-        '--add-data=auth_server.py:.',
-        '--add-data=remote_control.py:.',
+        '--additional-hooks-dir=.',
+        '--hidden-import=auth_server',
+        '--hidden-import=remote_control', 
         '--hidden-import=requests',
         '--hidden-import=urllib3',
+        '--collect-all=auth_server',
         '--distpath=releases/macos',
-        'simple_gui.py'
+        'simple_gui.py',
+        'auth_server.py',
+        'remote_control.py'
     ])
     
     # Create proper .app structure
