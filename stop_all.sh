@@ -7,9 +7,12 @@ echo "🛑 Stopping all file server processes..."
 pkill -f "python.*auth_server" 2>/dev/null && echo "✅ Stopped auth_server processes"
 pkill -f "FileShareServer" 2>/dev/null && echo "✅ Stopped FileShareServer processes"
 pkill -f "fileshare-server" 2>/dev/null && echo "✅ Stopped fileshare-server processes"
+pkill -f "fileShare" 2>/dev/null && echo "✅ Stopped fileShare processes"
+pkill -f "simple_gui" 2>/dev/null && echo "✅ Stopped control panel processes"
 
-# Kill any Python processes on port 8000
+# Kill any Python processes on ports 8000 and 9000
 lsof -ti:8000 | xargs kill -9 2>/dev/null && echo "✅ Freed port 8000"
+lsof -ti:9000 | xargs kill -9 2>/dev/null && echo "✅ Freed port 9000"
 
 # Deactivate virtual environment if active
 if [[ "$VIRTUAL_ENV" != "" ]]; then

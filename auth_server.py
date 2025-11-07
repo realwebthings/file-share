@@ -7,13 +7,15 @@ import hashlib
 import time
 import sqlite3
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+from socketserver import ThreadingMixIn
 import urllib.parse
 from remote_control import RemoteControl
 
 class AuthFileHandler(SimpleHTTPRequestHandler):
     VALID_TOKENS = {}  # token -> {user, expires}
     FAILED_ATTEMPTS = {}
-    DB_FILE = 'users.db'
+    DB_FILE = os.environ.get('FILESHARE_DB_PATH', 'users.db')
+    ADMIN_PASSWORD = None  # Store admin password in memory
     
     def get_template_path(self, template_name):
         """Get template path for both development and packaged app"""
@@ -25,8 +27,18 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
             return os.path.join('templates', template_name)
     
     @classmethod
+    def get_admin_password(cls):
+        """Get current admin password from memory"""
+        return cls.ADMIN_PASSWORD
+    
+    @classmethod
     def init_db(cls):
         conn = sqlite3.connect(cls.DB_FILE)
+        # Ensure database file has proper permissions on Linux
+        try:
+            os.chmod(cls.DB_FILE, 0o644)
+        except (OSError, AttributeError):
+            pass  # Ignore permission errors
         cursor = conn.cursor()
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
@@ -35,32 +47,43 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
                 password_hash TEXT NOT NULL,
                 salt TEXT NOT NULL,
                 is_approved BOOLEAN DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                password_plain TEXT
             )
         ''')
         
-        # Create admin user if doesn't exist
+        # Add password_plain column if it doesn't exist (migration)
+        try:
+            cursor.execute('ALTER TABLE users ADD COLUMN password_plain TEXT')
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        # Always generate new admin password on each start
+        import uuid
+        admin_password = str(uuid.uuid4())
+        admin_salt = secrets.token_hex(16)
+        admin_hash = hashlib.pbkdf2_hmac('sha256', admin_password.encode(), admin_salt.encode(), 100000)
+        
+        # Check if admin user exists
         cursor.execute('SELECT COUNT(*) FROM users WHERE username = ?', ('admin',))
         if cursor.fetchone()[0] == 0:
-            import uuid
-            admin_password = str(uuid.uuid4())
-            admin_salt = secrets.token_hex(16)
-            admin_hash = hashlib.pbkdf2_hmac('sha256', admin_password.encode(), admin_salt.encode(), 100000)
-            cursor.execute('INSERT INTO users (username, password_hash, salt, is_approved) VALUES (?, ?, ?, 1)',
-                         ('admin', admin_hash.hex(), admin_salt))
-            
-            # Save password to desktop for easy access
-            desktop_path = os.path.expanduser('~/Desktop/FileShare_Admin_Password.txt')
-            with open(desktop_path, 'w') as f:
-                f.write(f"File Share Server - Admin Credentials\n")
-                f.write(f"=====================================\n\n")
-                f.write(f"Username: admin\n")
-                f.write(f"Password: {admin_password}\n\n")
-                f.write(f"Created: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write(f"\nKeep this file safe and delete when no longer needed.\n")
-            
-            print(f"\n*** ADMIN PASSWORD: {admin_password} ***")
-            print("*** PASSWORD SAVED TO: ~/Desktop/FileShare_Admin_Password.txt ***\n")
+            # Create new admin user
+            cursor.execute('INSERT INTO users (username, password_hash, salt, is_approved, password_plain) VALUES (?, ?, ?, 1, ?)',
+                         ('admin', admin_hash.hex(), admin_salt, admin_password))
+        else:
+            # Update existing admin user with new password
+            try:
+                cursor.execute('UPDATE users SET password_hash = ?, salt = ?, password_plain = ? WHERE username = ?',
+                             (admin_hash.hex(), admin_salt, admin_password, 'admin'))
+            except sqlite3.OperationalError:
+                # Fallback if password_plain column doesn't exist
+                cursor.execute('UPDATE users SET password_hash = ?, salt = ? WHERE username = ?',
+                             (admin_hash.hex(), admin_salt, 'admin'))
+        
+        # Store password in memory
+        cls.ADMIN_PASSWORD = admin_password
+        print(f"\n*** ADMIN PASSWORD: {admin_password} ***")
+        print("*** NEW PASSWORD GENERATED - SAVE IT NOW ***\n")
         conn.commit()
         conn.close()
     
@@ -535,6 +558,16 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
         self.send_header('Location', f'/admin?token={current_token}')
         self.end_headers()
 
+def cleanup_admin_password():
+    """Clear admin password from memory for security"""
+    AuthFileHandler.ADMIN_PASSWORD = None
+    print("🗑️  Admin password cleared from memory for security")
+
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    """Handle requests in separate threads"""
+    daemon_threads = True
+    allow_reuse_address = True
+
 def get_local_ip():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -546,8 +579,8 @@ def get_local_ip():
         return "127.0.0.1"
 
 def create_server(port=8000, host='0.0.0.0'):
-    """Create and return HTTP server instance without starting it"""
-    return HTTPServer((host, port), AuthFileHandler)
+    """Create and return threaded HTTP server instance without starting it"""
+    return ThreadedHTTPServer((host, port), AuthFileHandler)
 
 def main():
     # Initialize database
@@ -562,7 +595,7 @@ def main():
     local_ip = get_local_ip()
     
     print("\n" + "="*60)
-    print("🔐 FILE SHARE SERVER - RUNNING")
+    print("🔐 fileShare.app - RUNNING")
     print("="*60)
     print(f"📱 MOBILE ACCESS: http://{local_ip}:{PORT}")
     print(f"💻 COMPUTER ACCESS: http://localhost:{PORT}")
@@ -588,6 +621,7 @@ def main():
         print("\n🛑 Shutting down server...")
         remote_control.stop()
         server.shutdown()
+        cleanup_admin_password()
         print("✅ Server stopped successfully")
 
 if __name__ == "__main__":

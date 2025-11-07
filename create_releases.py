@@ -24,7 +24,7 @@ def create_windows_release():
         venv_pyinstaller, 
         '--onefile',
         '--console',
-        '--name=FileShareServer',
+        '--name=fileShare',
         '--add-data=templates:templates',
         '--hidden-import=requests',
         '--hidden-import=urllib3',
@@ -34,10 +34,10 @@ def create_windows_release():
     
     # Create batch launcher for easier use
     batch_content = '''@echo off
-title File Share Server
+title fileShare.app
 echo.
 echo ========================================
-echo    🔐 File Share Server Starting...
+echo    🔐 fileShare.app Starting...
 echo ========================================
 echo.
 echo 📱 Instructions:
@@ -48,21 +48,21 @@ echo 4. Go to the IP address shown
 echo.
 echo ⚠️  Keep this window open while using
 echo.
-FileShareServer.exe
+fileShare.exe
 echo.
 echo Server stopped. Press any key to exit...
 pause >nul
 '''
     
-    with open('releases/windows/Start FileShare Server.bat', 'w') as f:
+    with open('releases/windows/Start fileShare.bat', 'w') as f:
         f.write(batch_content)
     
     # Create user guide
-    guide_content = '''# 📱 File Share Server - Quick Start
+    guide_content = '''# 📱 fileShare.app - Quick Start
 
 ## 🚀 How to Use
 
-1. **Double-click** "Start FileShare Server.bat"
+1. **Double-click** "Start fileShare.bat"
 2. **Save** the admin password shown in the black window
 3. **Note** the IP address (like 192.168.1.100:8000)
 4. **On your phone**: Open browser, go to that IP address
@@ -94,13 +94,13 @@ pause >nul
         f.write(uninstaller_content)
     
     # Create ZIP package only if executable exists
-    exe_path = 'releases/windows/FileShareServer.exe'
+    exe_path = 'releases/windows/fileShare.exe'
     if os.path.exists(exe_path):
         with zipfile.ZipFile('releases/file-share-windows.zip', 'w') as zipf:
-            zipf.write(exe_path, 'FileShareServer/FileShareServer.exe')
-            zipf.write('releases/windows/Start FileShare Server.bat', 'FileShareServer/Start FileShare Server.bat')
-            zipf.write('releases/windows/README.txt', 'FileShareServer/README.txt')
-            zipf.write('releases/windows/Uninstall.bat', 'FileShareServer/Uninstall.bat')
+            zipf.write(exe_path, 'fileShare/fileShare.exe')
+            zipf.write('releases/windows/Start fileShare.bat', 'fileShare/Start fileShare.bat')
+            zipf.write('releases/windows/README.txt', 'fileShare/README.txt')
+            zipf.write('releases/windows/Uninstall.bat', 'fileShare/Uninstall.bat')
         print("✅ Windows release: releases/file-share-windows.zip")
     else:
         print("⚠️  Windows executable not found (cross-compilation not supported)")
@@ -124,7 +124,7 @@ def create_macos_release():
         venv_pyinstaller, 
         '--onefile',
         '--windowed',
-        '--name=FileShareServer',
+        '--name=fileShare',
         '--add-data=templates:templates',
         '--add-data=auth_server.py:.',
         '--add-data=remote_control.py:.',
@@ -135,7 +135,7 @@ def create_macos_release():
     ])
     
     # Create proper .app structure
-    app_name = "File Share Server.app"
+    app_name = "fileShare.app"
     app_path = f"releases/macos/{app_name}"
     
     if os.path.exists(app_path):
@@ -147,22 +147,21 @@ def create_macos_release():
     # Create launcher script that runs the web GUI
     launcher_script = '''#!/bin/bash
 cd "$(dirname "$0")"
-echo "🎛️  Starting File Share Control Panel..."
+echo "🎛️  Starting fileShare.app Control Panel..."
 echo "📱 Control panel will open in your browser"
 echo "⚠️  Keep this window open while using"
 echo ""
-./FileShareServer
+./fileShare
 '''
     
-    with open(f"{app_path}/Contents/MacOS/File Share Server", 'w') as f:
+    with open(f"{app_path}/Contents/MacOS/fileShare", 'w') as f:
         f.write(launcher_script)
     
     # Copy executable
-    shutil.copy("releases/macos/FileShareServer", f"{app_path}/Contents/MacOS/")
+    shutil.copy("releases/macos/fileShare", f"{app_path}/Contents/MacOS/")
     
     # Make executable
-    os.chmod(f"{app_path}/Contents/MacOS/File Share Server", 0o755)
-    os.chmod(f"{app_path}/Contents/MacOS/FileShareServer", 0o755)
+    os.chmod(f"{app_path}/Contents/MacOS/fileShare", 0o755)
     
     # Create Info.plist
     plist_content = '''<?xml version="1.0" encoding="UTF-8"?>
@@ -170,13 +169,13 @@ echo ""
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>File Share Server</string>
+    <string>fileShare</string>
     <key>CFBundleIdentifier</key>
-    <string>com.fileshare.server</string>
+    <string>com.fileshare.app</string>
     <key>CFBundleName</key>
-    <string>File Share Server</string>
+    <string>fileShare</string>
     <key>CFBundleDisplayName</key>
-    <string>File Share Server</string>
+    <string>fileShare.app</string>
     <key>CFBundleVersion</key>
     <string>1.0.0</string>
     <key>CFBundleShortVersionString</key>
@@ -199,7 +198,7 @@ echo ""
     try:
         subprocess.run([
             'hdiutil', 'create', 
-            '-volname', 'File Share Server',
+            '-volname', 'fileShare.app',
             '-srcfolder', f'releases/macos/{app_name}',
             '-ov', '-format', 'UDZO',
             'releases/file-share-macos.dmg'
@@ -230,7 +229,7 @@ def create_linux_release():
         venv_pyinstaller, 
         '--onefile',
         '--console',
-        '--name=fileshare-server',
+        '--name=fileShare',
         '--add-data=templates:templates',
         '--hidden-import=requests',
         '--hidden-import=urllib3',
@@ -243,7 +242,7 @@ def create_linux_release():
 cd "$(dirname "$0")"
 
 echo "========================================="
-echo "   🔐 File Share Server Starting..."
+echo "   🔐 fileShare.app Starting..."
 echo "========================================="
 echo ""
 echo "📱 Instructions:"
@@ -255,43 +254,44 @@ echo ""
 echo "⚠️  Keep this terminal open while using"
 echo ""
 
-./fileshare-server
+./fileShare
 
 echo ""
 echo "Server stopped. Press Enter to exit..."
 read
 '''
     
-    with open('releases/linux/start-fileshare-server.sh', 'w') as f:
+    with open('releases/linux/start-fileShare.sh', 'w') as f:
         f.write(launcher_script)
     
-    os.chmod('releases/linux/start-fileshare-server.sh', 0o755)
+    os.chmod('releases/linux/start-fileShare.sh', 0o755)
     
     # Create .desktop file
     desktop_content = '''[Desktop Entry]
 Version=1.0
 Type=Application
-Name=File Share Server
+Name=fileShare.app
 Comment=Share files between devices
-Exec=./start-fileshare-server.sh
+Exec=./start-fileShare.sh
 Path=.
 Icon=folder
 Terminal=true
 Categories=Network;FileTransfer;
 '''
     
-    with open('releases/linux/fileshare-server.desktop', 'w') as f:
+    with open('releases/linux/fileShare.desktop', 'w') as f:
         f.write(desktop_content)
     
     # Create tar.gz package only if executable exists
-    exe_path = 'releases/linux/fileshare-server'
+    exe_path = 'releases/linux/fileShare'
     if os.path.exists(exe_path):
-        subprocess.run([
-            'tar', '-czf', 'releases/file-share-linux.tar.gz',
-            '-C', 'releases/linux',
-            'fileshare-server', 'start-fileshare-server.sh', 'fileshare-server.desktop'
-        ])
+        import tarfile
+        with tarfile.open('releases/file-share-linux.tar.gz', 'w:gz') as tar:
+            tar.add('releases/linux/fileShare', arcname='fileShare')
+            tar.add('releases/linux/start-fileShare.sh', arcname='start-fileShare.sh')
+            tar.add('releases/linux/fileShare.desktop', arcname='fileShare.desktop')
         print("✅ Linux release: releases/file-share-linux.tar.gz")
+        print("📝 Clean Linux package (Python tarfile, no metadata)")
     else:
         print("⚠️  Linux executable not found (cross-compilation not supported)")
         # Create placeholder
@@ -328,7 +328,7 @@ def main():
     print("\n📋 Distribution ready:")
     print("- Windows: Double-click .bat file to start")
     print("- macOS: Double-click .app to start")
-    print("- Linux: Run ./start-fileshare-server.sh")
+    print("- Linux: Run ./start-fileShare.sh")
 
 if __name__ == "__main__":
     main()

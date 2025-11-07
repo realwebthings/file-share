@@ -6,11 +6,19 @@ import os
 import socket
 import sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from typing import Optional
+
+# Import auth_server at module level
+try:
+    import auth_server
+except ImportError:
+    auth_server = None
 
 class ControlPanelHandler(BaseHTTPRequestHandler):
     server_thread = None
     server_instance = None
     _admin_password_cache = None
+    control_server: Optional['HTTPServer'] = None  # Reference to control panel server
     
     def do_GET(self):
         if self.path == '/':
@@ -19,6 +27,8 @@ class ControlPanelHandler(BaseHTTPRequestHandler):
             self.start_file_server()
         elif self.path == '/stop':
             self.stop_file_server()
+        elif self.path == '/quit':
+            self.quit_application()
         elif self.path == '/status':
             self.send_status()
         else:
@@ -46,7 +56,7 @@ class ControlPanelHandler(BaseHTTPRequestHandler):
             html = html.replace('{local_ip}', local_ip)
             html = html.replace('{admin_password}', admin_password or 'Will be created when server starts')
             html = html.replace('{password_note}', 
-                              '<p><small>Password also saved to: ~/Desktop/FileShare_Admin_Password.txt</small></p>' if admin_password else '')
+                              '<p><small>⚠️ Save this password - it will be cleared when server stops</small></p>' if admin_password else '')
             
         except FileNotFoundError as e:
             self.send_error(500, f"Template file not found: {e}")
@@ -65,19 +75,30 @@ class ControlPanelHandler(BaseHTTPRequestHandler):
                 import auth_server
                 
                 def run_server():
-                    # Initialize database first to create admin password
-                    auth_server.AuthFileHandler.init_db()
-                    # Clear password cache so it gets refreshed
-                    ControlPanelHandler._admin_password_cache = None
-                    
-                    ControlPanelHandler.server_instance = auth_server.create_server(8000, '0.0.0.0')
-                    ControlPanelHandler.server_instance.serve_forever()
+                    try:
+                        print("🔧 Initializing database...")
+                        # Initialize database first to create admin password
+                        auth_server.AuthFileHandler.init_db()
+                        # Clear password cache so it gets refreshed
+                        ControlPanelHandler._admin_password_cache = None
+                        
+                        print("🚀 Creating server on port 8000...")
+                        ControlPanelHandler.server_instance = auth_server.create_server(8000, '0.0.0.0')
+                        print("✅ Server created, starting to serve...")
+                        ControlPanelHandler.server_instance.serve_forever()
+                    except Exception as e:
+                        print(f"❌ Server thread error: {e}")
+                        import traceback
+                        traceback.print_exc()
                 
                 ControlPanelHandler.server_thread = threading.Thread(target=run_server, daemon=True)
                 ControlPanelHandler.server_thread.start()
                 time.sleep(0.5)
                 message = "Server started successfully!"
             except Exception as e:
+                print(f"❌ Start server error: {e}")
+                import traceback
+                traceback.print_exc()
                 message = f"Failed to start server: {str(e)}"
         
         template_path = self.get_template_path('message.html')
@@ -95,6 +116,9 @@ class ControlPanelHandler(BaseHTTPRequestHandler):
             ControlPanelHandler.server_instance.shutdown()
             ControlPanelHandler.server_instance = None
             ControlPanelHandler.server_thread = None
+            # Clean up admin password file
+            if auth_server:
+                auth_server.cleanup_admin_password()
             message = "Server stopped successfully!"
         else:
             message = "Server is not running!"
@@ -127,31 +151,46 @@ class ControlPanelHandler(BaseHTTPRequestHandler):
             return "127.0.0.1"
     
     def get_admin_password(self):
-        # Use cached password if available and server is running
-        if (ControlPanelHandler._admin_password_cache and 
-            ControlPanelHandler.server_thread and 
-            ControlPanelHandler.server_thread.is_alive()):
-            return ControlPanelHandler._admin_password_cache
-            
-        password_file = os.path.expanduser("~/Desktop/FileShare_Admin_Password.txt")
-        if os.path.exists(password_file):
-            try:
-                with open(password_file, 'r') as f:
-                    content = f.read()
-                    for line in content.split('\n'):
-                        if 'Password:' in line:
-                            password = line.split('Password:')[1].strip()
-                            ControlPanelHandler._admin_password_cache = password
-                            return password
-            except:
-                pass
+        # Only show password if server is running
+        if (ControlPanelHandler.server_thread and 
+            ControlPanelHandler.server_thread.is_alive() and 
+            auth_server):
+            return auth_server.AuthFileHandler.get_admin_password()
         return None
+    
+    def quit_application(self):
+        # Stop file server if running
+        if ControlPanelHandler.server_instance:
+            ControlPanelHandler.server_instance.shutdown()
+            if auth_server:
+                auth_server.cleanup_admin_password()
+        
+        # Send response
+        message = "Application shutting down..."
+        template_path = self.get_template_path('message.html')
+        with open(template_path, 'r', encoding='utf-8') as f:
+            html = f.read()
+        html = html.replace('{message}', message)
+        
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html; charset=utf-8')
+        self.end_headers()
+        self.wfile.write(html.encode('utf-8'))
+        
+        # Shutdown control panel server after response
+        def shutdown_server():
+            time.sleep(1)
+            if ControlPanelHandler.control_server:
+                ControlPanelHandler.control_server.shutdown()
+        
+        threading.Thread(target=shutdown_server, daemon=True).start()
 
 def main():
     PORT = 9000
     server = HTTPServer(('127.0.0.1', PORT), ControlPanelHandler)
+    ControlPanelHandler.control_server = server  # Store reference
     
-    print(f"🎛️  File Share Control Panel starting...")
+    print(f"🎛️  fileShare.app Control Panel starting...")
     print(f"📱 Opening control panel in browser...")
     
     # Open browser after a short delay
@@ -163,11 +202,20 @@ def main():
     
     try:
         server.serve_forever()
-    except KeyboardInterrupt:
-        print("\n🛑 Shutting down control panel...")
-        if ControlPanelHandler.server_instance:
-            ControlPanelHandler.server_instance.shutdown()
-        server.shutdown()
+    except (KeyboardInterrupt, OSError):
+        print("\n🛑 Shutting down fileShare.app...")
+        try:
+            if ControlPanelHandler.server_instance:
+                ControlPanelHandler.server_instance.shutdown()
+                if auth_server:
+                    auth_server.cleanup_admin_password()
+        except:
+            pass
+        try:
+            server.shutdown()
+            server.server_close()
+        except:
+            pass
 
 if __name__ == "__main__":
     main()
