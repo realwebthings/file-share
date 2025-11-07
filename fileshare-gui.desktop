@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=fileShare.app
+Comment=Share files over WiFi with GUI
+Exec=python3 -c "import sys; sys.path.append('/opt/fileShare' if os.path.exists('/opt/fileShare') else os.path.expanduser('~/.local/share/fileShare')); import gui_control_panel; gui_control_panel.FileShareGUI().run()"
+Icon=folder-remote
+Terminal=false
+Categories=Network;FileTransfer;
+StartupNotify=true

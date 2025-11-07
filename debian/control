@@ -1,0 +1,19 @@
+Package: fileshare-server
+Version: 1.0.0
+Section: net
+Priority: optional
+Architecture: all
+Depends: python3 (>= 3.8)
+Maintainer: Your Name <your.email@example.com>
+Description: Secure file sharing server for local networks
+ FileShare Server allows you to easily share files between your computer
+ and mobile devices over your local WiFi network. Features include:
+ .
+  * Secure authentication with admin approval
+  * Mobile-friendly web interface
+  * Video streaming support
+  * Rate limiting protection
+  * Zero external dependencies
+ .
+ Perfect for sharing files between your Linux computer and phone/tablet
+ without needing cloud services.
