@@ -48,26 +48,60 @@ mkdir -p "$INSTALL_DIR" "$BIN_DIR" "$DESKTOP_DIR" "$INSTALL_DIR/templates"
 
 # Download files
 echo -e "${BLUE}📥 Downloading fileShare.app...${NC}"
-REPO_URL="https://raw.githubusercontent.com/realwebthings/file-share/main"
+REPO_URL="https://raw.githubusercontent.com/realwebthings/file-share/linux"
 
-# Download and run GUI installer
-echo "📥 Downloading fileShare.app GUI installer..."
-if curl -sSf "https://github.com/realwebthings/file-share/releases/latest/download/fileshare-linux-gui.run" -o "/tmp/fileshare-gui.run" 2>/dev/null; then
-    if [ -s "/tmp/fileshare-gui.run" ] && head -1 "/tmp/fileshare-gui.run" | grep -q "#!/bin/bash"; then
-        chmod +x "/tmp/fileshare-gui.run"
-        /tmp/fileshare-gui.run
-        rm "/tmp/fileshare-gui.run"
-    else
-        echo "❌ Invalid installer file downloaded"
-        rm -f "/tmp/fileshare-gui.run"
-        echo "Please create GitHub release first or download manually"
-        exit 1
-    fi
-else
-    echo "❌ Download failed - GitHub release not found"
-    echo "Please:"
-    echo "1. Create GitHub release with fileshare-linux-gui.run"
-    echo "2. Or download manually from: https://github.com/realwebthings/file-share/releases"
+# Check tkinter
+echo -e "${BLUE}🔍 Checking tkinter...${NC}"
+python3 -c "import tkinter" 2>/dev/null || {
+    echo -e "${RED}❌ Install tkinter first:${NC}"
+    echo "  Ubuntu: sudo apt install python3-tk"
     exit 1
-fi
+}
+echo -e "${GREEN}✅ tkinter found${NC}"
+
+# Download files from GitHub
+echo -e "${BLUE}📥 Downloading files...${NC}"
+curl -sSL "$REPO_URL/auth_server.py" -o "$INSTALL_DIR/auth_server.py"
+curl -sSL "$REPO_URL/gui_control_panel.py" -o "$INSTALL_DIR/gui_control_panel.py"
+curl -sSL "$REPO_URL/remote_control.py" -o "$INSTALL_DIR/remote_control.py"
+
+# Download templates
+for template in login.html register.html welcome.html directory.html admin.html message.html control_panel.html; do
+    curl -sSL "$REPO_URL/templates/$template" -o "$INSTALL_DIR/templates/$template"
+done
+
+chmod +x "$INSTALL_DIR/auth_server.py"
+
+# Create launchers
+cat > "$BIN_DIR/fileshare" << 'LAUNCHER'
+#!/bin/bash
+cd "$HOME/.local/share/fileShare"
+export FILESHARE_DB_PATH="$HOME/.fileshare/users.db"
+mkdir -p "$HOME/.fileshare"
+python3 auth_server.py "$@"
+LAUNCHER
+
+cat > "$BIN_DIR/fileshare-gui" << 'GUI_LAUNCHER'
+#!/bin/bash
+cd "$HOME/.local/share/fileShare"
+python3 gui_control_panel.py
+GUI_LAUNCHER
+
+chmod +x "$BIN_DIR/fileshare" "$BIN_DIR/fileshare-gui"
+
+# Desktop entry
+cat > "$DESKTOP_DIR/fileshare-gui.desktop" << 'DESKTOP'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=fileShare.app
+Comment=Share files over WiFi
+Exec=fileshare-gui
+Icon=folder-remote
+Terminal=false
+Categories=Network;FileTransfer;
+DESKTOP
+
+echo -e "${GREEN}✅ Installation complete!${NC}"
+echo -e "${BLUE}🚀 Run: fileshare-gui${NC}"
 
