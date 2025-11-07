@@ -10,22 +10,22 @@ def create_release_assets():
     
     print("📦 Creating GitHub release assets...")
     
-    # Ensure releases directory exists
-    os.makedirs('releases', exist_ok=True)
+    # Ensure releases/github directory exists
+    os.makedirs('releases/github', exist_ok=True)
     
     # Copy main installer
     if os.path.exists('releases/fileshare-gui-simple.run'):
-        shutil.copy('releases/fileshare-gui-simple.run', 'releases/fileshare-linux-gui.run')
+        shutil.copy('releases/fileshare-gui-simple.run', 'releases/github/fileshare-linux-gui.run')
         print("✅ fileshare-linux-gui.run")
     
     # Copy CLI installer
     if os.path.exists('install-linux.sh'):
-        shutil.copy('install-linux.sh', 'releases/install-linux.sh')
+        shutil.copy('install-linux.sh', 'releases/github/install-linux.sh')
         print("✅ install-linux.sh")
     
     # Copy documentation
     if os.path.exists('README-LINUX-GUI.md'):
-        shutil.copy('README-LINUX-GUI.md', 'releases/README-LINUX.md')
+        shutil.copy('README-LINUX-GUI.md', 'releases/github/README-LINUX.md')
         print("✅ README-LINUX.md")
     
     # Create release notes
@@ -70,16 +70,16 @@ fileshare-gui
 Enjoy secure file sharing! 🎉
 """
     
-    with open('releases/RELEASE_NOTES.md', 'w') as f:
+    with open('releases/github/RELEASE_NOTES.md', 'w') as f:
         f.write(release_notes)
     print("✅ RELEASE_NOTES.md")
     
     print("\n🎉 Release assets ready!")
     print("\n📋 Upload these files to GitHub Release:")
-    print("  - releases/fileshare-linux-gui.run")
-    print("  - releases/install-linux.sh") 
-    print("  - releases/README-LINUX.md")
-    print("  - releases/RELEASE_NOTES.md")
+    print("  - releases/github/fileshare-linux-gui.run")
+    print("  - releases/github/install-linux.sh") 
+    print("  - releases/github/README-LINUX.md")
+    print("  - releases/github/RELEASE_NOTES.md")
 
 if __name__ == "__main__":
     create_release_assets()

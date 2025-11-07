@@ -50,96 +50,24 @@ mkdir -p "$INSTALL_DIR" "$BIN_DIR" "$DESKTOP_DIR" "$INSTALL_DIR/templates"
 echo -e "${BLUE}📥 Downloading fileShare.app...${NC}"
 REPO_URL="https://raw.githubusercontent.com/realwebthings/file-share/main"
 
-# Download GUI installer
-curl -sSL "https://github.com/realwebthings/file-share/releases/latest/download/fileshare-gui-simple.run" -o "/tmp/fileshare-gui.run"
-chmod +x "/tmp/fileshare-gui.run"
-/tmp/fileshare-gui.run
-rm "/tmp/fileshare-gui.run"
-exit 0
-
-# Download templates
-for template in login.html register.html welcome.html directory.html admin.html message.html control_panel.html; do
-    curl -sSL "$REPO_URL/templates/$template" -o "$INSTALL_DIR/templates/$template"
-done
-
-# Set permissions
-chmod +x "$INSTALL_DIR/auth_server.py"
-
-# Create launcher
-cat > "$BIN_DIR/fileshare" << 'EOF'
-#!/bin/bash
-# fileShare.app launcher
-
-# Create user data directory
-mkdir -p "$HOME/.fileshare"
-
-# Find installation
-if [ -d "/opt/fileShare" ]; then
-    INSTALL_DIR="/opt/fileShare"
-elif [ -d "$HOME/.local/share/fileShare" ]; then
-    INSTALL_DIR="$HOME/.local/share/fileShare"
+# Download and run GUI installer
+echo "📥 Downloading fileShare.app GUI installer..."
+if curl -sSf "https://github.com/realwebthings/file-share/releases/latest/download/fileshare-linux-gui.run" -o "/tmp/fileshare-gui.run" 2>/dev/null; then
+    if [ -s "/tmp/fileshare-gui.run" ] && head -1 "/tmp/fileshare-gui.run" | grep -q "#!/bin/bash"; then
+        chmod +x "/tmp/fileshare-gui.run"
+        /tmp/fileshare-gui.run
+        rm "/tmp/fileshare-gui.run"
+    else
+        echo "❌ Invalid installer file downloaded"
+        rm -f "/tmp/fileshare-gui.run"
+        echo "Please create GitHub release first or download manually"
+        exit 1
+    fi
 else
-    echo "❌ fileShare.app not found"
+    echo "❌ Download failed - GitHub release not found"
+    echo "Please:"
+    echo "1. Create GitHub release with fileshare-linux-gui.run"
+    echo "2. Or download manually from: https://github.com/realwebthings/file-share/releases"
     exit 1
 fi
 
-cd "$INSTALL_DIR"
-export FILESHARE_DB_PATH="$HOME/.fileshare/users.db"
-
-echo "🔐 Starting fileShare.app..."
-echo "📱 Access from phone browser at the IP shown below"
-echo "⚠️  Keep this terminal open while using"
-echo ""
-
-python3 auth_server.py "$@"
-EOF
-
-chmod +x "$BIN_DIR/fileshare"
-
-# Create desktop entry
-cat > "$DESKTOP_DIR/fileshare.desktop" << 'EOF'
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=fileShare.app
-Comment=Share files securely over WiFi
-Exec=gnome-terminal -- fileshare
-Icon=folder-remote
-Terminal=false
-Categories=Network;FileTransfer;
-EOF
-
-# Create uninstaller
-cat > "$INSTALL_DIR/uninstall.sh" << 'EOF'
-#!/bin/bash
-echo "🗑️  Uninstalling fileShare.app..."
-
-if [ -d "/opt/fileShare" ]; then
-    if [ "$EUID" -ne 0 ]; then
-        echo "❌ Run with sudo for system installation"
-        exit 1
-    fi
-    rm -rf "/opt/fileShare" "/usr/local/bin/fileshare" "/usr/share/applications/fileshare.desktop"
-else
-    rm -rf "$HOME/.local/share/fileShare" "$HOME/.local/bin/fileshare" "$HOME/.local/share/applications/fileshare.desktop"
-fi
-
-echo "✅ Uninstalled (user data in ~/.fileshare preserved)"
-EOF
-
-chmod +x "$INSTALL_DIR/uninstall.sh"
-
-# Check PATH
-if [ "$EUID" -ne 0 ] && ! echo "$PATH" | grep -q "$BIN_DIR"; then
-    echo ""
-    echo -e "${YELLOW}⚠️  $BIN_DIR not in PATH${NC}"
-    echo "Add to ~/.bashrc: export PATH=\"$BIN_DIR:\$PATH\""
-fi
-
-echo ""
-echo -e "${GREEN}✅ fileShare.app installed!${NC}"
-echo ""
-echo -e "${BLUE}🚀 Start with:${NC} fileshare"
-echo -e "${BLUE}🗑️  Uninstall:${NC} $INSTALL_DIR/uninstall.sh"
-echo ""
-echo -e "${GREEN}Happy file sharing! 🎉${NC}"
