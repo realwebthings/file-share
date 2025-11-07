@@ -105,3 +105,4 @@ DESKTOP
 echo -e "${GREEN}✅ Installation complete!${NC}"
 echo -e "${BLUE}🚀 Run: fileshare-gui${NC}"
 
+
