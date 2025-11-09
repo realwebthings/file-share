@@ -90,8 +90,8 @@ echo "✅ Installation complete!"
 echo "🚀 Run: fileshare (terminal) or fileshare-gui (GUI)"
 '''
     
-    # Write to build directory
-    output_path = "build/run/fileshare-installer.run"
+    # Write to releases directory
+    output_path = "releases/run/fileshare-installer.run"
     with open(output_path, 'w') as f:
         f.write(installer_script)
     

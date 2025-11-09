@@ -29,7 +29,7 @@ python3 build-flatpak.py  # Flatpak package
 ## 📁 Output Structure
 
 ```
-build/
+releases/
 ├── run/        # Universal .run installer
 ├── deb/        # Debian packages
 ├── rpm/        # RPM packages  

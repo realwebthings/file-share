@@ -14,7 +14,7 @@ def build_deb_package():
     
     package_name = "fileshare"
     version = "1.0.0"
-    build_dir = f"build/deb/{package_name}_{version}"
+    build_dir = f"releases/deb/{package_name}_{version}"
     
     # Clean and create build directory
     if os.path.exists(build_dir):
@@ -122,8 +122,8 @@ License: MIT
     
     # Build package
     try:
-        subprocess.run(['dpkg-deb', '--build', build_dir], check=True, cwd='build/deb')
-        deb_file = f"build/deb/{package_name}_{version}.deb"
+        subprocess.run(['dpkg-deb', '--build', build_dir], check=True, cwd='releases/deb')
+        deb_file = f"releases/deb/{package_name}_{version}.deb"
         size = os.path.getsize(deb_file)
         print(f"✅ Created: {deb_file} ({size:,} bytes)")
         print("📋 Install with: sudo dpkg -i fileshare_1.0.0.deb")

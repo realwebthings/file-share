@@ -12,7 +12,7 @@ def build_snap_package():
     
     print("📦 Building Snap package...")
     
-    build_dir = "build/snap"
+    build_dir = "releases/snap"
     
     # Clean and create build directory
     if os.path.exists(build_dir):
@@ -114,7 +114,7 @@ if __name__ == '__main__':
     os.chmod(f"{app_dir}/control_panel.py", 0o755)
     
     print(f"✅ Snap configuration created in: {build_dir}")
-    print("📋 Build with: cd build/snap && snapcraft")
+    print("📋 Build with: cd releases/snap && snapcraft")
     print("📋 Install with: sudo snap install fileshare_1.0.0_amd64.snap --dangerous")
     
     return build_dir

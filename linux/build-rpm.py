@@ -15,7 +15,7 @@ def build_rpm_package():
     package_name = "fileshare"
     version = "1.0.0"
     release = "1"
-    build_dir = f"build/rpm"
+    build_dir = f"releases/rpm"
     
     # Clean and create RPM build structure
     if os.path.exists(build_dir):

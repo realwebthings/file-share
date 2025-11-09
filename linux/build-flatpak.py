@@ -12,7 +12,7 @@ def build_flatpak_package():
     
     print("📦 Building Flatpak package...")
     
-    build_dir = "build/flatpak"
+    build_dir = "releases/flatpak"
     app_id = "com.fileshare.FileShare"
     
     # Clean and create build directory
