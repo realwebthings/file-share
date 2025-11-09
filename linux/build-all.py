@@ -11,6 +11,9 @@ def build_all_packages():
     
     print("🚀 Building all Linux packages...")
     
+    # Get the directory where this script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
     builders = [
         ("build-run.py", ".run installer"),
         ("build-deb.py", ".deb package"),
@@ -23,9 +26,10 @@ def build_all_packages():
     
     for script, description in builders:
         print(f"\n📦 Building {description}...")
+        script_path = os.path.join(script_dir, script)
         try:
-            result = subprocess.run([sys.executable, script], 
-                                  capture_output=True, text=True, check=True)
+            result = subprocess.run([sys.executable, script_path], 
+                                  cwd=script_dir, capture_output=True, text=True, check=True)
             print(f"✅ {description} - SUCCESS")
             results.append((description, "SUCCESS", ""))
         except subprocess.CalledProcessError as e:
@@ -46,7 +50,7 @@ def build_all_packages():
         print(f"{status_icon} {desc:<20} - {status}")
     
     print("\n🎯 Distribution ready packages created!")
-    print("📁 Check build/ directory for output files")
+    print("📁 Check releases/ directory for output files")
 
 if __name__ == "__main__":
     build_all_packages()
