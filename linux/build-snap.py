@@ -5,7 +5,7 @@ Build Snap package for universal Linux distribution
 import os
 import sys
 import shutil
-import yaml
+import json
 
 def build_snap_package():
     """Build Snap package"""
@@ -80,9 +80,37 @@ Supports both command-line and GUI modes for easy file sharing.
         }
     }
     
-    # Write snapcraft.yaml
+    # Write snapcraft.yaml (convert from JSON)
+    yaml_content = '''name: fileshare
+version: '1.0.0'
+summary: Share files over WiFi network
+description: |
+  A simple HTTP server to share files between devices on the same network.
+  Supports both command-line and GUI modes for easy file sharing.
+
+grade: stable
+confinement: strict
+base: core22
+
+apps:
+  fileshare:
+    command: fileshare/main.py
+    plugs: [network, network-bind, home]
+  fileshare-gui:
+    command: fileshare/control_panel.py
+    plugs: [network, network-bind, home, desktop, x11]
+
+parts:
+  fileshare:
+    plugin: dump
+    source: .
+    stage-packages: [python3, python3-tk]
+    organize:
+      'fileshare/*': 'fileshare/'
+'''
+    
     with open(f"{build_dir}/snapcraft.yaml", 'w') as f:
-        yaml.dump(snapcraft_config, f, default_flow_style=False)
+        f.write(yaml_content)
     
     # Create launcher scripts
     launcher_script = """#!/usr/bin/env python3
