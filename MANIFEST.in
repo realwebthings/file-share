@@ -1,7 +1,0 @@
-include README.md
-include LICENSE
-include requirements.txt
-recursive-include templates *.html
-recursive-include static *.css *.js *.png *.ico
-global-exclude __pycache__
-global-exclude *.py[co]
