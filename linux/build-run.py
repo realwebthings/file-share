@@ -92,6 +92,7 @@ echo "🚀 Run: fileshare (terminal) or fileshare-gui (GUI)"
     
     # Write to releases directory
     output_path = "releases/run/fileshare-installer.run"
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, 'w') as f:
         f.write(installer_script)
     
