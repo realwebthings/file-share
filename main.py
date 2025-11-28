@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+"""
+Secure File Share Server - Main authentication and file serving module
+"""
 import os
 import sys
 import socket
@@ -9,17 +12,52 @@ import sqlite3
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from socketserver import ThreadingMixIn
 import urllib.parse
-from remote_control import RemoteControl
+
+# Import configuration
+try:
+    from app.config import Config
+except ImportError:
+    # Fallback configuration if config.py not found
+    class Config:
+        DEFAULT_PORT = 8000
+        TOKEN_EXPIRY_HOURS = 1
+        RATE_LIMIT_ATTEMPTS = 5
+        RATE_LIMIT_WINDOW_MINUTES = 2
+        SHARED_PATHS_CACHE_SECONDS = 30
+        HOST = '0.0.0.0'
+        
+        @classmethod
+        def get_db_path(cls):
+            if getattr(sys, 'frozen', False):
+                return os.path.expanduser('~/fileShare_users.db')
+            return os.environ.get('FILESHARE_DB_PATH', 'users.db')
+
+# Import remote control (optional)
+try:
+    from app.remote_control import RemoteControl
+except ImportError:
+    try:
+        from remote_control import RemoteControl
+    except ImportError:
+        RemoteControl = None
 
 class AuthFileHandler(SimpleHTTPRequestHandler):
     VALID_TOKENS = {}  # token -> {user, expires}
     FAILED_ATTEMPTS = {}
-    DB_FILE = os.environ.get('FILESHARE_DB_PATH', 'users.db')
+    DB_FILE = Config.get_db_path()
     ADMIN_PASSWORD = None  # Store admin password in memory
     ADMIN_NOTIFICATIONS = []  # Store admin notifications
     ACTIVE_USERS = {}  # token -> {user, last_activity, ip, user_agent}
     SHARED_PATHS_CACHE = None  # Cache shared paths to avoid repeated DB queries
     CACHE_TIMESTAMP = 0  # Track when cache was last updated
+    
+    def add_security_headers(self):
+        """Add security headers to response"""
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('X-Frame-Options', 'DENY')
+        self.send_header('X-XSS-Protection', '1; mode=block')
+        self.send_header('Referrer-Policy', 'strict-origin-when-cross-origin')
+        self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
     
     def get_template_path(self, template_name):
         """Get template path for both development and packaged app"""
@@ -51,8 +89,7 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
                 password_hash TEXT NOT NULL,
                 salt TEXT NOT NULL,
                 is_approved BOOLEAN DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                password_plain TEXT
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
@@ -73,11 +110,16 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
         except sqlite3.OperationalError:
             pass  # Column already exists
         
-        # Add password_plain column if it doesn't exist (migration)
+        # Remove password_plain column if it exists (security fix)
         try:
-            cursor.execute('ALTER TABLE users ADD COLUMN password_plain TEXT')
+            cursor.execute('SELECT password_plain FROM users LIMIT 1')
+            # Column exists, remove it
+            cursor.execute('CREATE TABLE users_new AS SELECT id, username, password_hash, salt, is_approved, created_at FROM users')
+            cursor.execute('DROP TABLE users')
+            cursor.execute('ALTER TABLE users_new RENAME TO users')
+            print("🔒 Removed plain text password storage for security")
         except sqlite3.OperationalError:
-            pass  # Column already exists
+            pass  # Column doesn't exist
         
         # Always generate new admin password on each start
         import uuid
@@ -89,17 +131,12 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
         cursor.execute('SELECT COUNT(*) FROM users WHERE username = ?', ('admin',))
         if cursor.fetchone()[0] == 0:
             # Create new admin user
-            cursor.execute('INSERT INTO users (username, password_hash, salt, is_approved, password_plain) VALUES (?, ?, ?, 1, ?)',
-                         ('admin', admin_hash.hex(), admin_salt, admin_password))
+            cursor.execute('INSERT INTO users (username, password_hash, salt, is_approved) VALUES (?, ?, ?, 1)',
+                         ('admin', admin_hash.hex(), admin_salt))
         else:
             # Update existing admin user with new password
-            try:
-                cursor.execute('UPDATE users SET password_hash = ?, salt = ?, password_plain = ? WHERE username = ?',
-                             (admin_hash.hex(), admin_salt, admin_password, 'admin'))
-            except sqlite3.OperationalError:
-                # Fallback if password_plain column doesn't exist
-                cursor.execute('UPDATE users SET password_hash = ?, salt = ? WHERE username = ?',
-                             (admin_hash.hex(), admin_salt, 'admin'))
+            cursor.execute('UPDATE users SET password_hash = ?, salt = ? WHERE username = ?',
+                         (admin_hash.hex(), admin_salt, 'admin'))
         
         # Store password in memory
         cls.ADMIN_PASSWORD = admin_password
@@ -112,14 +149,22 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
     def get_shared_paths(cls):
         """Get shared paths from database with caching"""
         current_time = time.time()
-        # Cache for 30 seconds to improve performance
-        if cls.SHARED_PATHS_CACHE is None or (current_time - cls.CACHE_TIMESTAMP) > 30:
-            conn = sqlite3.connect(cls.DB_FILE)
-            cursor = conn.cursor()
-            cursor.execute('SELECT path, is_file FROM shared_paths')
-            cls.SHARED_PATHS_CACHE = {row[0]: bool(row[1]) for row in cursor.fetchall()}
-            cls.CACHE_TIMESTAMP = current_time
-            conn.close()
+        # Cache for configured seconds to improve performance
+        if cls.SHARED_PATHS_CACHE is None or (current_time - cls.CACHE_TIMESTAMP) > Config.SHARED_PATHS_CACHE_SECONDS:
+            try:
+                conn = sqlite3.connect(cls.DB_FILE, timeout=5.0)
+                cursor = conn.cursor()
+                cursor.execute('SELECT path, is_file FROM shared_paths')
+                cls.SHARED_PATHS_CACHE = {row[0]: bool(row[1]) for row in cursor.fetchall()}
+                cls.CACHE_TIMESTAMP = current_time
+            except sqlite3.Error as e:
+                print(f"Database error in get_shared_paths: {e}")
+                cls.SHARED_PATHS_CACHE = {}
+            finally:
+                try:
+                    conn.close()
+                except:
+                    pass
         return cls.SHARED_PATHS_CACHE
     
     @classmethod
@@ -133,9 +178,9 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
         salt = secrets.token_hex(16)
         password_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
         
-        conn = sqlite3.connect(cls.DB_FILE)
-        cursor = conn.cursor()
         try:
+            conn = sqlite3.connect(cls.DB_FILE, timeout=5.0)
+            cursor = conn.cursor()
             # Explicitly set is_approved=0 to ensure user needs admin approval
             cursor.execute('INSERT INTO users (username, password_hash, salt, is_approved) VALUES (?, ?, ?, 0)',
                          (username, password_hash.hex(), salt))
@@ -144,8 +189,14 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
             return True
         except sqlite3.IntegrityError:
             return False
+        except sqlite3.Error as e:
+            print(f"Database error creating user: {e}")
+            return False
         finally:
-            conn.close()
+            try:
+                conn.close()
+            except:
+                pass
     
     @classmethod
     def verify_user(cls, username, password):
@@ -178,7 +229,7 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
     
     def generate_token(self, username):
         token = secrets.token_urlsafe(32)
-        expires = time.time() + 3600  # 1 hour
+        expires = time.time() + (Config.TOKEN_EXPIRY_HOURS * 3600)
         self.VALID_TOKENS[token] = {'user': username, 'expires': expires}
         return token
     
@@ -193,8 +244,8 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
             if time.time() - last_attempt > 120:
                 del self.FAILED_ATTEMPTS[client_ip]
                 return True
-            # Block if 5 or more attempts
-            return attempts < 5
+            # Block if max attempts reached
+            return attempts < Config.RATE_LIMIT_ATTEMPTS
         return True
     
     def record_failed_attempt(self, client_ip):
@@ -257,10 +308,20 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
         return None
     
     def cleanup_expired_tokens(self):
+        """Clean up expired tokens and active users"""
         now = time.time()
         expired_tokens = [token for token, data in self.VALID_TOKENS.items() if now >= data['expires']]
         for token in expired_tokens:
             del self.VALID_TOKENS[token]
+            if token in self.ACTIVE_USERS:
+                del self.ACTIVE_USERS[token]
+        
+        # Also clean up inactive users (5 minutes)
+        inactive_tokens = [token for token, data in self.ACTIVE_USERS.items() 
+                          if now - data['last_activity'] > 300]
+        for token in inactive_tokens:
+            if token in self.ACTIVE_USERS:
+                del self.ACTIVE_USERS[token]
     
     def format_size(self, size):
         """Format file size in human readable format"""
@@ -300,6 +361,7 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
             
             self.send_response(200)
             self.send_header('Content-type', 'text/html; charset=utf-8')
+            self.add_security_headers()
             self.end_headers()
             self.wfile.write(html.encode('utf-8'))
         except FileNotFoundError:
@@ -391,11 +453,12 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
             now = time.time()
             if client_ip in self.FAILED_ATTEMPTS:
                 attempts, last_attempt = self.FAILED_ATTEMPTS[client_ip]
-                # Clear old attempts if more than 2 minutes passed
-                if now - last_attempt > 120:
+                # Clear old attempts if window expired
+                window_seconds = Config.RATE_LIMIT_WINDOW_MINUTES * 60
+                if now - last_attempt > window_seconds:
                     print(f"DEBUG: Clearing expired attempts for {client_ip} (timeout reached)")
                     del self.FAILED_ATTEMPTS[client_ip]
-                elif attempts >= 5:
+                elif attempts >= Config.RATE_LIMIT_ATTEMPTS:
                     time_remaining = int(120 - (now - last_attempt))
                     print(f"DEBUG: Rate limit active for {client_ip} - {attempts} attempts, {time_remaining}s remaining")
                     self.send_auth_page(f'🚫 Too many failed attempts. Please wait {time_remaining} seconds before trying again.')
@@ -1149,20 +1212,24 @@ class AuthFileHandler(SimpleHTTPRequestHandler):
                     conn.close()
                     return
                 
-                # Try to update with password_plain column first
-                try:
-                    cursor.execute('UPDATE users SET password_hash = ?, salt = ?, password_plain = ? WHERE id = ?',
-                                 (password_hash.hex(), salt, new_password, user_id))
-                    print(f"✅ Admin reset password for user: {username} -> {new_password}")
-                    # Store notification for admin
-                    AuthFileHandler.ADMIN_NOTIFICATIONS.append(f"Password reset for {username}: {new_password}")
-                except sqlite3.OperationalError:
-                    # Fallback if password_plain column doesn't exist
-                    cursor.execute('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?',
-                                 (password_hash.hex(), salt, user_id))
-                    print(f"✅ Admin reset password for user: {username} -> {new_password} (no plain text storage)")
-                    # Store notification for admin
-                    AuthFileHandler.ADMIN_NOTIFICATIONS.append(f"Password reset for {username}: {new_password}")
+                # Update password (no plain text storage)
+                cursor.execute('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?',
+                             (password_hash.hex(), salt, user_id))
+                print(f"✅ Admin reset password for user: {username} -> {new_password}")
+                # Store notification for admin
+                AuthFileHandler.ADMIN_NOTIFICATIONS.append(f"Password reset for {username}: {new_password}")
+                
+                # Invalidate user sessions on password reset
+                tokens_to_remove = []
+                for token, data in AuthFileHandler.VALID_TOKENS.items():
+                    if data['user'] == username:
+                        tokens_to_remove.append(token)
+                
+                for token in tokens_to_remove:
+                    del AuthFileHandler.VALID_TOKENS[token]
+                    if token in AuthFileHandler.ACTIVE_USERS:
+                        del AuthFileHandler.ACTIVE_USERS[token]
+                print(f"🔒 Invalidated {len(tokens_to_remove)} sessions for {username}")
                 
                 conn.commit()
             else:
@@ -1423,21 +1490,24 @@ def get_local_ip():
     except:
         return "127.0.0.1"
 
-def create_server(port=8000, host='0.0.0.0'):
+def create_server(port=None, host=None):
     """Create and return threaded HTTP server instance without starting it"""
+    port = port or Config.DEFAULT_PORT
+    host = host or Config.HOST
     return ThreadedHTTPServer((host, port), AuthFileHandler)
 
 def main():
     # Initialize database
     AuthFileHandler.init_db()
     
-    # Initialize remote control
-    remote_control = RemoteControl()
-    remote_control.start_background_check()
+    # Initialize remote control if available
+    if RemoteControl:
+        remote_control = RemoteControl()
+        remote_control.start_background_check()
     
-    PORT = 8000
-    server = create_server(PORT)
+    server = create_server()
     local_ip = get_local_ip()
+    PORT = Config.DEFAULT_PORT
     
     print("\n" + "="*60)
     print("🔐 fileShare.app - RUNNING")
@@ -1464,7 +1534,11 @@ def main():
         server.serve_forever()
     except KeyboardInterrupt:
         print("\n🛑 Shutting down server...")
-        remote_control.stop()
+        if RemoteControl:
+            try:
+                remote_control.stop()
+            except:
+                pass
         server.shutdown()
         cleanup_admin_password()
         print("✅ Server stopped successfully")

@@ -1,14 +1,16 @@
 #!/bin/bash
-# Stop all file server processes and deactivate virtual environments
+# Stop all fileShare.app processes
 
-echo "🛑 Stopping all file server processes..."
+echo "🛑 Stopping all fileShare.app processes..."
 
-# Kill Python file server processes
-pkill -f "python.*auth_server" 2>/dev/null && echo "✅ Stopped auth_server processes"
-pkill -f "FileShareServer" 2>/dev/null && echo "✅ Stopped FileShareServer processes"
-pkill -f "fileshare-server" 2>/dev/null && echo "✅ Stopped fileshare-server processes"
-pkill -f "fileShare" 2>/dev/null && echo "✅ Stopped fileShare processes"
-pkill -f "simple_gui" 2>/dev/null && echo "✅ Stopped control panel processes"
+# Kill Python file server processes (new names)
+pkill -f "python.*main.py" 2>/dev/null && echo "✅ Stopped main server processes"
+pkill -f "python.*control_panel" 2>/dev/null && echo "✅ Stopped control panel processes"
+
+# Kill legacy processes (for compatibility)
+pkill -f "python.*auth_server" 2>/dev/null && echo "✅ Stopped legacy auth_server processes"
+pkill -f "python.*simple_gui" 2>/dev/null && echo "✅ Stopped legacy simple_gui processes"
+pkill -f "fileshare" 2>/dev/null && echo "✅ Stopped fileshare processes"
 
 # Kill any Python processes on ports 8000 and 9000
 lsof -ti:8000 | xargs kill -9 2>/dev/null && echo "✅ Freed port 8000"

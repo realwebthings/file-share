@@ -13,6 +13,28 @@ A simple HTTP server to share files between your Mac and mobile device.
    - Connect your phone to the same WiFi network as your Mac
    - Open browser on phone and go to the IP address shown (e.g., `http://192.168.1.100:8000`)
 
+## 🐧 Linux Installation
+
+### GUI Version (Recommended)
+```bash
+curl -sSL https://raw.githubusercontent.com/realwebthings/file-share/linux/install-linux.sh | bash
+fileshare-gui
+```
+
+### Command Line Version
+```bash
+curl -sSL https://github.com/realwebthings/file-share/releases/latest/download/fileshare-linux-gui.run | bash
+fileshare
+```
+
+### Features
+- 🎛️ GUI Control Panel with start/stop buttons
+- 📱 Auto-detected mobile URL display
+- 🔐 Admin password shown in GUI
+- 🌐 One-click browser opening
+- 📋 Clear usage instructions
+
+
 ## Features
 
 - ✅ Browse directories on your Mac from mobile
