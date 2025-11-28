@@ -8,22 +8,24 @@ import sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Optional
 
-# Import auth_server with proper path handling
-main = None
+# Import main server module
+main_server = None
 try:
-    # Try app directory first
-    from app import main
+    import main as main_server
 except ImportError:
     try:
-        # Try current directory
-        import auth_server
+        # Try importing from current directory if main.py exists
+        import sys
+        import os
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        if os.path.exists(os.path.join(current_dir, 'main.py')):
+            sys.path.insert(0, current_dir)
+            import main as main_server
+        else:
+            raise ImportError("main.py not found")
     except ImportError:
-        try:
-            # Try scripts directory
-            from scripts import auth_server
-        except ImportError:
-            print("❌ auth_server module not found")
-            main = None
+        print("❌ Main server module not found")
+        main_server = None
 
 class ControlPanelHandler(BaseHTTPRequestHandler):
     server_thread = None
@@ -94,24 +96,24 @@ class ControlPanelHandler(BaseHTTPRequestHandler):
         if ControlPanelHandler.server_thread and ControlPanelHandler.server_thread.is_alive():
             message = "Server is already running!"
         else:
-            if not main:
-                message = "❌ Auth server module not found. Please reinstall the application."
+            if not main_server:
+                message = "❌ Main server module not found. Please reinstall the application."
             else:
                 try:
                     def run_server():
                         try:
-                            if not main:
-                                raise ImportError("auth_server module not available")
+                            if not main_server:
+                                raise ImportError("Main server module not available")
                             
                             # Set database path for packaged apps
                             if getattr(sys, 'frozen', False):
                                 db_path = os.path.expanduser('~/fileShare_users.db')
                                 os.environ['FILESHARE_DB_PATH'] = db_path
-                                main.AuthFileHandler.DB_FILE = db_path
+                                main_server.AuthFileHandler.DB_FILE = db_path
                             
                             # Initialize database and create server
-                            main.AuthFileHandler.init_db()
-                            ControlPanelHandler.server_instance = main.create_server(8000, '0.0.0.0')
+                            main_server.AuthFileHandler.init_db()
+                            ControlPanelHandler.server_instance = main_server.create_server(8000, '0.0.0.0')
                             ControlPanelHandler.server_instance.serve_forever()
                         except Exception as e:
                             print(f"❌ Server error: {e}")
@@ -142,8 +144,11 @@ class ControlPanelHandler(BaseHTTPRequestHandler):
             ControlPanelHandler.server_instance = None
             ControlPanelHandler.server_thread = None
             # Clean up admin password file
-            if main is not None:
-                main.cleanup_admin_password()
+            if main_server is not None:
+                try:
+                    main_server.cleanup_admin_password()
+                except AttributeError:
+                    pass  # Function may not exist in all versions
             message = "Server stopped successfully!"
         else:
             message = "Server is not running!"
@@ -179,16 +184,19 @@ class ControlPanelHandler(BaseHTTPRequestHandler):
         # Only show password if server is running
         if (ControlPanelHandler.server_thread and 
             ControlPanelHandler.server_thread.is_alive() and 
-            main is not None):
-            return main.AuthFileHandler.get_admin_password()
+            main_server is not None):
+            return main_server.AuthFileHandler.get_admin_password()
         return None
     
     def quit_application(self):
         # Stop file server if running
         if ControlPanelHandler.server_instance:
             ControlPanelHandler.server_instance.shutdown()
-            if main is not None:
-                main.cleanup_admin_password()
+            if main_server is not None:
+                try:
+                    main_server.cleanup_admin_password()
+                except AttributeError:
+                    pass  # Function may not exist in all versions
         
         # Send response
         message = "Application shutting down..."
@@ -248,8 +256,11 @@ def main():
         try:
             if ControlPanelHandler.server_instance:
                 ControlPanelHandler.server_instance.shutdown()
-                if main is not None:
-                    main.cleanup_admin_password()
+                if main_server is not None:
+                    try:
+                        main_server.cleanup_admin_password()
+                    except AttributeError:
+                        pass
         except:
             pass
         try:
